@@ -31,6 +31,8 @@ env:
 
 jobs:
   deploy:
+    # Only deploy on develop branch (preprod) by default
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     permissions:
       contents: read
