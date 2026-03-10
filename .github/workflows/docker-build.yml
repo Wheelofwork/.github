@@ -1,0 +1,95 @@
+name: Docker Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: 'Name of the Docker image (e.g., admin, full-api)'
+        required: true
+        type: string
+      dockerfile:
+        description: 'Path to the Dockerfile'
+        required: false
+        type: string
+        default: './Dockerfile'
+      context:
+        description: 'Build context path'
+        required: false
+        type: string
+        default: '.'
+      build-args:
+        description: 'Build arguments (multiline string)'
+        required: false
+        type: string
+        default: ''
+      platforms:
+        description: 'Target platforms'
+        required: false
+        type: string
+        default: 'linux/amd64'
+    outputs:
+      image-tag:
+        description: 'The tag applied to the image (preprod or latest)'
+        value: ${{ jobs.build.outputs.tag }}
+      full-image:
+        description: 'Full image name with tag'
+        value: ${{ jobs.build.outputs.full-image }}
+      image-digest:
+        description: 'Image digest'
+        value: ${{ jobs.build.outputs.digest }}
+
+env:
+  REGISTRY: ghcr.io
+  ORGANIZATION: wheelofwork
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      full-image: ${{ steps.tag.outputs.full-image }}
+      digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TAG="latest"
+          else
+            TAG="preprod"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "full-image=${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/${{ inputs.image-name }}:$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          platforms: ${{ inputs.platforms }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/${{ inputs.image-name }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/${{ inputs.image-name }}:${{ github.sha }}
+          build-args: ${{ inputs.build-args }}
+          cache-from: type=gha,scope=${{ inputs.image-name }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.image-name }}

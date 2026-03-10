@@ -1,0 +1,59 @@
+name: Deploy to GKE
+
+on:
+  workflow_call:
+    inputs:
+      deployment-name:
+        description: 'Name of the Kubernetes deployment to restart'
+        required: true
+        type: string
+      cluster:
+        description: 'GKE cluster name'
+        required: false
+        type: string
+        default: 'preprod-wheelofwork'
+      location:
+        description: 'GKE cluster zone/region'
+        required: false
+        type: string
+        default: 'europe-west1-b'
+      namespace:
+        description: 'Kubernetes namespace'
+        required: false
+        type: string
+        default: 'default'
+
+env:
+  # Workload Identity Federation - centralized configuration
+  WIF_PROVIDER: projects/577134751227/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  SERVICE_ACCOUNT: github-deployer@wheelofwork.iam.gserviceaccount.com
+  PROJECT_ID: wheelofwork
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ inputs.cluster }}
+          location: ${{ inputs.location }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy
+        run: |
+          kubectl rollout restart deployment ${{ inputs.deployment-name }} \
+            --namespace ${{ inputs.namespace }}
+          kubectl rollout status deployment ${{ inputs.deployment-name }} \
+            --namespace ${{ inputs.namespace }} \
+            --timeout=300s
