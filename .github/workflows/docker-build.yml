@@ -29,7 +29,7 @@ on:
         default: 'linux/amd64'
     outputs:
       image-tag:
-        description: 'The tag applied to the image (preprod or latest)'
+        description: 'The tag applied to the image (preprod or prod)'
         value: ${{ jobs.build.outputs.tag }}
       full-image:
         description: 'Full image name with tag'
@@ -72,7 +72,7 @@ jobs:
         id: tag
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            TAG="latest"
+            TAG="prod"
           else
             TAG="preprod"
           fi
